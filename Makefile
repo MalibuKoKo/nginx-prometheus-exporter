@@ -1,6 +1,6 @@
 VERSION = 0.8.0
 TAG = $(VERSION)
-PREFIX = nginx/nginx-prometheus-exporter
+PREFIX = malibukoko/nginx-prometheus-exporter
 
 DOCKERFILEPATH = build
 DOCKERFILE = Dockerfile
@@ -21,10 +21,13 @@ test:
 	GO111MODULE=on go test -mod=vendor ./...
 
 container:
-	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(GIT_COMMIT) -f $(DOCKERFILEPATH)/$(DOCKERFILE) -t $(PREFIX):$(TAG) .
+	docker buildx build --platform linux/amd64,linux/arm64 --build-arg ARCH=arm64 --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(GIT_COMMIT) -f $(DOCKERFILEPATH)/$(DOCKERFILE) -t $(PREFIX):$(TAG) .
 
 push: container
 	docker push $(PREFIX):$(TAG)
+
+$(BUILD_DIR)/nginx-prometheus-exporter-linux-arm64:
+	GO111MODULE=on GOARCH=arm64 CGO_ENABLED=0 GOOS=linux go build -mod=vendor -installsuffix cgo -ldflags "-X main.version=$(VERSION) -X main.gitCommit=$(GIT_COMMIT)" -o $(BUILD_DIR)/nginx-prometheus-exporter-linux-amd64
 
 $(BUILD_DIR)/nginx-prometheus-exporter-linux-amd64:
 	GO111MODULE=on GOARCH=amd64 CGO_ENABLED=0 GOOS=linux go build -mod=vendor -installsuffix cgo -ldflags "-X main.version=$(VERSION) -X main.gitCommit=$(GIT_COMMIT)" -o $(BUILD_DIR)/nginx-prometheus-exporter-linux-amd64
@@ -32,7 +35,11 @@ $(BUILD_DIR)/nginx-prometheus-exporter-linux-amd64:
 $(BUILD_DIR)/nginx-prometheus-exporter-linux-i386:
 	GO111MODULE=on GOARCH=386 CGO_ENABLED=0 GOOS=linux go build -mod=vendor -installsuffix cgo -ldflags "-X main.version=$(VERSION) -X main.gitCommit=$(GIT_COMMIT)" -o $(BUILD_DIR)/nginx-prometheus-exporter-linux-i386
 
-release: $(BUILD_DIR)/nginx-prometheus-exporter-linux-amd64 $(BUILD_DIR)/nginx-prometheus-exporter-linux-i386
+release: $(BUILD_DIR)/nginx-prometheus-exporter-linux-arm64 $(BUILD_DIR)/nginx-prometheus-exporter-linux-amd64 $(BUILD_DIR)/nginx-prometheus-exporter-linux-i386
+	mv $(BUILD_DIR)/nginx-prometheus-exporter-linux-arm64 $(BUILD_DIR)/nginx-prometheus-exporter && \
+	tar czf $(BUILD_DIR)/nginx-prometheus-exporter-$(TAG).linux-arm64.tar.gz -C $(BUILD_DIR) nginx-prometheus-exporter && \
+	rm $(BUILD_DIR)/nginx-prometheus-exporter
+
 	mv $(BUILD_DIR)/nginx-prometheus-exporter-linux-amd64 $(BUILD_DIR)/nginx-prometheus-exporter && \
 	tar czf $(BUILD_DIR)/nginx-prometheus-exporter-$(TAG).linux-amd64.tar.gz -C $(BUILD_DIR) nginx-prometheus-exporter && \
 	rm $(BUILD_DIR)/nginx-prometheus-exporter
@@ -41,9 +48,10 @@ release: $(BUILD_DIR)/nginx-prometheus-exporter-linux-amd64 $(BUILD_DIR)/nginx-p
 	tar czf $(BUILD_DIR)/nginx-prometheus-exporter-$(TAG).linux-i386.tar.gz -C $(BUILD_DIR) nginx-prometheus-exporter && \
 	rm $(BUILD_DIR)/nginx-prometheus-exporter
 
-	shasum -a 256 $(BUILD_DIR)/nginx-prometheus-exporter-$(TAG).linux-amd64.tar.gz $(BUILD_DIR)/nginx-prometheus-exporter-$(TAG).linux-i386.tar.gz|sed "s|$(BUILD_DIR)/||" > $(BUILD_DIR)/sha256sums.txt
+	shasum -a 256 $(BUILD_DIR)/nginx-prometheus-exporter-$(TAG).linux-arm64.tar.gz $(BUILD_DIR)/nginx-prometheus-exporter-$(TAG).linux-amd64.tar.gz $(BUILD_DIR)/nginx-prometheus-exporter-$(TAG).linux-i386.tar.gz|sed "s|$(BUILD_DIR)/||" > $(BUILD_DIR)/sha256sums.txt
 
 clean:
+	-rm $(BUILD_DIR)/nginx-prometheus-exporter-$(TAG).linux-arm64.tar.gz
 	-rm $(BUILD_DIR)/nginx-prometheus-exporter-$(TAG).linux-amd64.tar.gz
 	-rm $(BUILD_DIR)/nginx-prometheus-exporter-$(TAG).linux-i386.tar.gz
 	-rm $(BUILD_DIR)/sha256sums.txt
